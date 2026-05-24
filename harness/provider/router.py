@@ -91,7 +91,7 @@ class ProviderRouter(Provider):
         primary: Provider,
         fallback: Provider | None = None,
         *,
-        total_timeout: float = 55.0,
+        total_timeout: float = 110.0,
     ) -> None:
         self._primary = primary
         self._fallback = fallback

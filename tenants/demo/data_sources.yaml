@@ -1,0 +1,25 @@
+# Data sources del tenant `demo` (Lovbot CRM Inmobiliaria).
+# Los `*_env` son nombres de variables de entorno — el loader resuelve
+# el valor real desde el entorno del proceso.
+
+postgres:
+  host_env: LOVBOT_PG_HOST
+  port_env: LOVBOT_PG_PORT
+  user_env: LOVBOT_PG_USER
+  password_env: LOVBOT_PG_PASS
+  database: lovbot_crm_modelo
+  # tenant_slug ='demo' se inyecta automáticamente en queries por el
+  # validador de query_postgres (ver harness/tool/ecosystem/postgres.py).
+
+tavily:
+  api_key_env: TAVILY_API_KEY
+
+llm:
+  primary:
+    provider: openai
+    model: gpt-5
+    api_key_env: LOVBOT_OPENAI_API_KEY
+  fallback:
+    provider: gemini
+    model: gemini-2.5-pro
+    api_key_env: LOVBOT_GEMINI_API_KEY

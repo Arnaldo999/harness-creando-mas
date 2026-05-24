@@ -1,0 +1,40 @@
+# docker-compose.yml — para deploy en Coolify Hetzner.
+# Coolify lee el `services.harness.labels` para configurar Traefik.
+# Las dos redes externas dan acceso a (a) proxy público y (b) Postgres interno.
+
+services:
+  harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: harness-creando-mas:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    networks:
+      - coolify
+      - p8s8kcgckgoc484wwo4w8wck_default
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      # Traefik (Coolify).
+      - "traefik.enable=true"
+      - "traefik.http.routers.harness.rule=Host(`agente.lovbot.ai`)"
+      - "traefik.http.routers.harness.entrypoints=https"
+      - "traefik.http.routers.harness.tls=true"
+      - "traefik.http.routers.harness.tls.certresolver=letsencrypt"
+      - "traefik.http.services.harness.loadbalancer.server.port=8000"
+      # Coolify housekeeping.
+      - "coolify.managed=true"
+
+networks:
+  coolify:
+    external: true
+  p8s8kcgckgoc484wwo4w8wck_default:
+    external: true

@@ -15,7 +15,6 @@ services:
       - "8000"
     networks:
       - coolify
-      - p8s8kcgckgoc484wwo4w8wck_default
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
@@ -35,6 +34,4 @@ services:
 
 networks:
   coolify:
-    external: true
-  p8s8kcgckgoc484wwo4w8wck_default:
     external: true

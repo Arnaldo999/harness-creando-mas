@@ -16,10 +16,12 @@ tavily:
 
 llm:
   primary:
+    # gpt-5-mini: ~3-5x más rápido que gpt-5, calidad sobrada para queries de CRM.
+    # Si se necesita razonamiento más profundo, bajar a tenants/<slug>/ y override.
     provider: openai
-    model: gpt-5
+    model: gpt-5-mini
     api_key_env: LOVBOT_OPENAI_API_KEY
   fallback:
     provider: gemini
-    model: gemini-2.5-pro
+    model: gemini-2.5-flash
     api_key_env: LOVBOT_GEMINI_API_KEY

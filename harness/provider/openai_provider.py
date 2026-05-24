@@ -36,8 +36,8 @@ class OpenAIProvider(Provider):
         model: str = "gpt-5",
         system: str = "",
         max_tokens: int = 8192,
-        timeout: float = 30.0,
-        max_retries: int = 2,
+        timeout: float = 20.0,
+        max_retries: int = 1,
         base_url: str | None = None,
     ) -> None:
         kwargs: dict[str, Any] = {

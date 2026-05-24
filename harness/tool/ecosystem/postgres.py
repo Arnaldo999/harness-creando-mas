@@ -305,7 +305,7 @@ class QueryPostgresTool(Tool):
         except Exception as e:
             # Error introspeccionando metadata — no bloqueamos, ejecutamos
             # sin inyección. Logueamos para diagnóstico.
-            log.warning("tenant_introspection_failed", extra={"err": str(e)[:200]})
+            log.warning("tenant_introspection_failed: %s", str(e)[:200])
 
         # 3. Forzar LIMIT.
         sql = ensure_limit(sql, self._default_limit)
@@ -316,7 +316,7 @@ class QueryPostgresTool(Tool):
             async with pool.acquire() as conn:
                 rows = await conn.fetch(sql)
         except Exception as e:
-            log.info("query_postgres_error", extra={"err": str(e)[:300]})
+            log.error("query_postgres_error: %s | sql=%s", str(e)[:300], sql[:200])
             return json.dumps({"error": f"SQL error: {e}", "sql_executed": sql}), True
 
         result: list[dict[str, Any]] = [dict(r) for r in rows]

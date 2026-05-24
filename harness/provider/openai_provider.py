@@ -11,6 +11,7 @@ Adaptado del byo-harness:
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -22,6 +23,7 @@ from harness.api import (
     Response,
     Role,
     StopReason,
+    StreamEvent,
     ToolDef,
     Usage,
 )
@@ -33,7 +35,7 @@ class OpenAIProvider(Provider):
         self,
         *,
         api_key: str | None,
-        model: str = "gpt-5",
+        model: str = "gpt-4o-mini",
         system: str = "",
         max_tokens: int = 8192,
         timeout: float = 20.0,
@@ -113,6 +115,99 @@ class OpenAIProvider(Provider):
             )
 
         return out
+
+    async def send_stream(
+        self, messages: list[Message], tools: list[ToolDef]
+    ) -> AsyncIterator[StreamEvent]:
+        """Streaming nativo via `stream=True`.
+
+        Acumula deltas de tool_calls (vienen fragmentados con `index`),
+        emite text deltas inline, y al final yieldea un `stop` con
+        finish_reason + usage (si el SDK los entrega via
+        `stream_options={"include_usage": True}`).
+        """
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": self._to_messages(messages),
+            "max_completion_tokens": self._max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if tools:
+            kwargs["tools"] = self._to_tools(tools)
+
+        stream = await self._client.chat.completions.create(**kwargs)
+
+        # Acumulador de tool_calls. OpenAI manda los argumentos en deltas
+        # con un `index` por tool_call; hay que pegarlos.
+        tool_calls_acc: dict[int, dict[str, str]] = {}
+        finish_reason: str | None = None
+        final_usage: Usage | None = None
+
+        async for chunk in stream:
+            # Usage llega en el último chunk cuando se pide include_usage.
+            usage_obj = getattr(chunk, "usage", None)
+            if usage_obj is not None:
+                cached = 0
+                details = getattr(usage_obj, "prompt_tokens_details", None)
+                if details is not None:
+                    cached = getattr(details, "cached_tokens", 0) or 0
+                final_usage = Usage(
+                    input_tokens=getattr(usage_obj, "prompt_tokens", 0) or 0,
+                    output_tokens=getattr(usage_obj, "completion_tokens", 0) or 0,
+                    cache_read_tokens=cached,
+                )
+
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            choice = choices[0]
+
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+
+            # Text delta.
+            content_delta = getattr(delta, "content", None)
+            if content_delta:
+                yield StreamEvent(type="text", text=content_delta)
+
+            # Tool call deltas.
+            tcalls = getattr(delta, "tool_calls", None) or []
+            for tc in tcalls:
+                idx = getattr(tc, "index", 0) or 0
+                slot = tool_calls_acc.setdefault(
+                    idx, {"id": "", "name": "", "arguments": ""}
+                )
+                if getattr(tc, "id", None):
+                    slot["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn is not None:
+                    if getattr(fn, "name", None):
+                        slot["name"] = fn.name
+                    if getattr(fn, "arguments", None):
+                        slot["arguments"] += fn.arguments
+
+        # Tool calls completos → emitir uno por uno.
+        for idx in sorted(tool_calls_acc.keys()):
+            slot = tool_calls_acc[idx]
+            if slot["name"]:
+                yield StreamEvent(
+                    type="tool_use_start",
+                    tool_use_id=slot["id"],
+                    tool_name=slot["name"],
+                    tool_input=slot["arguments"] or "{}",
+                )
+
+        stop = _from_finish_reason(finish_reason)
+        yield StreamEvent(
+            type="stop",
+            stop_reason=stop,
+            usage=final_usage or Usage(),
+        )
 
     # ----- Traducción genérico → OpenAI -----
 

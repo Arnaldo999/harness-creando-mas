@@ -40,12 +40,14 @@ def test_carga_demo_tenant(
 
     assert cfg.llm_primary is not None
     assert cfg.llm_primary.provider == "openai"
-    assert cfg.llm_primary.model == "gpt-5"
+    # Switch a gpt-4o-mini (Fase 1) — sin reasoning overhead, más rápido
+    # para tool_calls + streaming SSE. Ver tenants/demo/data_sources.yaml.
+    assert cfg.llm_primary.model == "gpt-4o-mini"
     assert cfg.llm_primary.api_key == "sk-test"
 
     assert cfg.llm_fallback is not None
     assert cfg.llm_fallback.provider == "gemini"
-    assert cfg.llm_fallback.model == "gemini-2.5-pro"
+    assert cfg.llm_fallback.model == "gemini-2.5-flash"
 
     assert cfg.tavily_api_key == "tv-test"
 

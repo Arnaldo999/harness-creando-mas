@@ -118,3 +118,76 @@ class TestProviderRouter:
         with pytest.raises(_FakeRandomError):
             await router.send([], [])
         assert fallback.calls == 0
+
+
+class TestProviderRouterStreaming:
+    @pytest.mark.asyncio
+    async def test_send_stream_delega_al_primary(self) -> None:
+        """El router debe delegar send_stream al primary si todo bien."""
+        from harness.api import StopReason, StreamEvent, Usage
+
+        primary = MockProvider(
+            provider_name="openai",
+            stream_events=[
+                [
+                    StreamEvent(type="text", text="hola"),
+                    StreamEvent(type="text", text=" mundo"),
+                    StreamEvent(
+                        type="stop",
+                        stop_reason=StopReason.END_TURN,
+                        usage=Usage(input_tokens=5, output_tokens=2),
+                    ),
+                ]
+            ],
+        )
+        fallback = MockProvider(
+            provider_name="gemini",
+            stream_events=[[StreamEvent(type="text", text="NO debería verse")]],
+        )
+        router = ProviderRouter(primary=primary, fallback=fallback)
+
+        collected: list[StreamEvent] = []
+        async for ev in router.send_stream([], []):
+            collected.append(ev)
+
+        text_events = [e for e in collected if e.type == "text"]
+        assert [e.text for e in text_events] == ["hola", " mundo"]
+        stop = next(e for e in collected if e.type == "stop")
+        assert stop.stop_reason == StopReason.END_TURN
+        assert router.last_used == "openai"
+
+    @pytest.mark.asyncio
+    async def test_send_stream_failover_a_fallback_si_primary_revienta_pre_chunk(
+        self,
+    ) -> None:
+        """Si el primary tira RateLimitError antes del primer chunk →
+        el router cae al fallback."""
+        from harness.api import StopReason, StreamEvent, Usage
+
+        primary = MockProvider(
+            provider_name="openai",
+            stream_events=[[]],  # ignored — error tira primero
+            error=_FakeRateLimit("rate"),
+        )
+        fallback = MockProvider(
+            provider_name="gemini",
+            stream_events=[
+                [
+                    StreamEvent(type="text", text="gemini stream"),
+                    StreamEvent(
+                        type="stop",
+                        stop_reason=StopReason.END_TURN,
+                        usage=Usage(input_tokens=1, output_tokens=1),
+                    ),
+                ]
+            ],
+        )
+        router = ProviderRouter(primary=primary, fallback=fallback)
+
+        collected: list[StreamEvent] = []
+        async for ev in router.send_stream([], []):
+            collected.append(ev)
+
+        text_events = [e for e in collected if e.type == "text"]
+        assert any("gemini" in e.text for e in text_events)
+        assert router.last_used == "gemini"

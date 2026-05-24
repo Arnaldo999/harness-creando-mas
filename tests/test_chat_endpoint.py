@@ -152,3 +152,42 @@ def test_chat_con_bearer_incorrecto_da_401(
         headers={"Authorization": "Bearer otro-token"},
     )
     assert r.status_code == 401
+
+
+def test_chat_cached_devuelve_cached_true_en_segunda_request(
+    app_with_mock: TestClient,
+) -> None:
+    """Dos requests idénticos consecutivos: el segundo debe llegar
+    desde el cache (cached=true, latency baja, mismo respuesta)."""
+    import time
+
+    payload = {"message": "Pregunta repetida idempotente", "tenant_slug": "demo"}
+
+    r1 = app_with_mock.post("/chat", json=payload)
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert body1["cached"] is False
+    assert body1["respuesta"] == "Tenés 3 leads calientes."
+
+    t0 = time.perf_counter()
+    r2 = app_with_mock.post("/chat", json=payload)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert body2["cached"] is True
+    assert body2["respuesta"] == body1["respuesta"]
+    # El cache hit debe ser instantáneo (sin pegada al MockProvider).
+    # Tope generoso para CI lentos.
+    assert elapsed_ms < 100
+
+
+def test_chat_mensajes_distintos_no_comparten_cache(app_with_mock: TestClient) -> None:
+    r1 = app_with_mock.post(
+        "/chat", json={"message": "primera", "tenant_slug": "demo"}
+    )
+    r2 = app_with_mock.post(
+        "/chat", json={"message": "segunda distinta", "tenant_slug": "demo"}
+    )
+    assert r1.json()["cached"] is False
+    assert r2.json()["cached"] is False

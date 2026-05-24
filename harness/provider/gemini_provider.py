@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from harness.api import (
@@ -26,6 +27,7 @@ from harness.api import (
     Response,
     Role,
     StopReason,
+    StreamEvent,
     ToolDef,
     Usage,
 )
@@ -95,6 +97,78 @@ class GeminiProvider(Provider):
         )
 
         return self._from_gemini_response(resp)
+
+    async def send_stream(
+        self, messages: list[Message], tools: list[ToolDef]
+    ) -> AsyncIterator[StreamEvent]:
+        """Streaming nativo via `generate_content_stream`.
+
+        Si hay tools registradas, fallback al método no-streaming —
+        google-genai mezclando tools+streaming es flaky en versiones
+        anteriores a la 1.x. Para text-only emitimos deltas reales.
+        """
+        # Fallback: si hay tools, delegamos al base que llama a `send`
+        # y emite todo de una. Mantiene compat sin sorpresas.
+        if tools:
+            async for ev in super().send_stream(messages, tools):
+                yield ev
+            return
+
+        from google.genai import types  # noqa: PLC0415
+
+        contents = self._to_contents(messages)
+        config_kwargs: dict[str, Any] = {"max_output_tokens": self._max_tokens}
+        if self._system:
+            config_kwargs["system_instruction"] = self._system
+        config = types.GenerateContentConfig(**config_kwargs)
+
+        final_usage: Usage | None = None
+        last_finish: Any = None
+
+        try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=self._model,
+                contents=contents,
+                config=config,
+            )
+        except AttributeError:
+            # SDK demasiado viejo / sin streaming. Fallback al no-stream.
+            async for ev in super().send_stream(messages, tools):
+                yield ev
+            return
+
+        async for chunk in stream:
+            usage = getattr(chunk, "usage_metadata", None)
+            if usage:
+                final_usage = Usage(
+                    input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
+                    output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
+                    cache_read_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
+                )
+
+            candidates = getattr(chunk, "candidates", None) or []
+            if not candidates:
+                continue
+            cand = candidates[0]
+            last_finish = getattr(cand, "finish_reason", last_finish)
+            content = getattr(cand, "content", None)
+            parts = getattr(content, "parts", []) if content else []
+            for part in parts:
+                text = getattr(part, "text", None)
+                if text:
+                    yield StreamEvent(type="text", text=text)
+
+        finish_str = (
+            last_finish.name
+            if hasattr(last_finish, "name")
+            else (str(last_finish) if last_finish else "STOP")
+        )
+        stop = (
+            StopReason.END_TURN
+            if finish_str.upper() in {"STOP", "MAX_TOKENS"}
+            else StopReason.OTHER
+        )
+        yield StreamEvent(type="stop", stop_reason=stop, usage=final_usage or Usage())
 
     # ----- Traducción genérico → Gemini -----
 

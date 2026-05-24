@@ -33,6 +33,7 @@ class ChatResponse(BaseModel):
     tokens_out: int | None = None
     provider_used: str | None = None  # "openai" | "gemini" | "mock"
     session_id: str
+    cached: bool = False
 
 
 class HealthResponse(BaseModel):

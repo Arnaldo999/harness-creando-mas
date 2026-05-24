@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Literal
 
 
 class Role(str, Enum):
@@ -101,3 +102,41 @@ class Response:
     content: list[Block] = field(default_factory=list)
     stop_reason: StopReason = StopReason.OTHER
     usage: Usage = field(default_factory=Usage)
+
+
+# ----- Streaming -----
+
+StreamEventType = Literal[
+    "text",
+    "tool_use_start",
+    "tool_use_complete",
+    "usage",
+    "stop",
+    "error",
+]
+
+
+@dataclass
+class StreamEvent:
+    """Evento emitido por `Provider.send_stream` y `Agent.send_stream`.
+
+    Cada tipo usa un subset de campos:
+    - `text`: usa `text` (delta de texto que llega del modelo).
+    - `tool_use_start`: usa `tool_name`, `tool_use_id`, `tool_input`.
+    - `tool_use_complete`: usa `tool_name`, `tool_use_id`, `tool_result`,
+      `is_error`, `latency_ms`.
+    - `usage`: usa `usage`.
+    - `stop`: usa `stop_reason` (y opcionalmente `usage` final).
+    - `error`: usa `text` como mensaje.
+    """
+
+    type: StreamEventType
+    text: str = ""
+    tool_use_id: str = ""
+    tool_name: str = ""
+    tool_input: str = ""
+    tool_result: str = ""
+    is_error: bool = False
+    latency_ms: float = 0.0
+    stop_reason: StopReason | None = None
+    usage: Usage | None = None

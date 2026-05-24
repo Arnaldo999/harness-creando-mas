@@ -16,10 +16,11 @@ tavily:
 
 llm:
   primary:
-    # gpt-5-mini: ~3-5x más rápido que gpt-5, calidad sobrada para queries de CRM.
-    # Si se necesita razonamiento más profundo, bajar a tenants/<slug>/ y override.
+    # gpt-4o-mini: sin reasoning overhead, ~3-5x más rápido para tool_calls
+    # del CRM, mismo tool-calling API. Switch desde gpt-5-mini para responder
+    # más rápido en streaming SSE (menos tiempo hasta el primer chunk).
     provider: openai
-    model: gpt-5-mini
+    model: gpt-4o-mini
     api_key_env: LOVBOT_OPENAI_API_KEY
   fallback:
     provider: gemini

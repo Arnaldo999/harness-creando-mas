@@ -21,9 +21,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
-from harness.api import Message, Response, ToolDef
+from harness.api import Message, Response, StreamEvent, ToolDef
 from harness.provider.base import Provider
 
 log = logging.getLogger(__name__)
@@ -184,6 +185,79 @@ class ProviderRouter(Provider):
             raise ProvidersExhaustedError(
                 f"primary={self._primary.name} and fallback={self._fallback.name} both failed"
             ) from exc
+
+    async def send_stream(
+        self, messages: list[Message], tools: list[ToolDef]
+    ) -> AsyncIterator[StreamEvent]:
+        """Streaming con failover SOLO antes del primer chunk.
+
+        Si el primary falla obteniendo el iterador o yieldeando el
+        primer evento → reintenta con fallback. Una vez que emitimos
+        un evento al cliente, una excepción posterior se propaga
+        (ya rompimos el contrato de "switch silencioso").
+        """
+        try:
+            primary_iter = self._primary.send_stream(messages, tools).__aiter__()
+        except BaseException as exc:
+            if not _should_failover(exc) or self._fallback is None:
+                raise
+            log.warning(
+                "provider_stream_failover_pre_iter",
+                extra={
+                    "primary": self._primary.name,
+                    "fallback": self._fallback.name,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            self._last_used = self._fallback.name
+            async for ev in self._fallback.send_stream(messages, tools):
+                yield ev
+            return
+
+        first: StreamEvent | None = None
+        try:
+            first = await primary_iter.__anext__()
+        except StopAsyncIteration:
+            # Stream vacío del primary. Marcamos last_used y salimos.
+            self._last_used = self._primary.name
+            return
+        except BaseException as exc:
+            if not _should_failover(exc) or self._fallback is None:
+                raise
+            log.warning(
+                "provider_stream_failover_first_chunk",
+                extra={
+                    "primary": self._primary.name,
+                    "fallback": self._fallback.name,
+                    "error_type": type(exc).__name__,
+                    "error_msg": str(exc)[:200],
+                },
+            )
+            try:
+                self._last_used = self._fallback.name
+                async for ev in self._fallback.send_stream(messages, tools):
+                    yield ev
+                return
+            except BaseException as fb_exc:
+                log.error(
+                    "provider_stream_fallback_also_failed",
+                    extra={
+                        "fallback": self._fallback.name,
+                        "error_type": type(fb_exc).__name__,
+                    },
+                )
+                raise ProvidersExhaustedError(
+                    f"primary={self._primary.name} and "
+                    f"fallback={self._fallback.name} both failed (stream)"
+                ) from fb_exc
+
+        self._last_used = self._primary.name
+        if first is not None:
+            yield first
+        # A partir de acá: cualquier excepción del primary se propaga
+        # sin failover (ya hay datos en el wire).
+        async for ev in primary_iter:
+            yield ev
 
 
 __all__ = ["ProviderRouter", "ProvidersExhaustedError", "_should_failover"]

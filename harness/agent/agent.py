@@ -14,8 +14,19 @@ Diferencias vs. byo-harness CLI:
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import AsyncIterator
 
-from harness.api import Block, BlockType, Message, Response, Role, StopReason, Usage
+from harness.api import (
+    Block,
+    BlockType,
+    Message,
+    Response,
+    Role,
+    StopReason,
+    StreamEvent,
+    Usage,
+)
 from harness.provider.base import Provider
 from harness.tool.registry import Registry
 
@@ -51,6 +62,10 @@ class Agent:
         self.max_turns = max_turns
         self._messages: list[Message] = []
         self._usage_total = Usage()
+        # Conjunto de tool names invocadas durante esta conversación.
+        # Lo expone el caché para decidir si la respuesta es cacheable
+        # (skip cache si se usó alguna tool de escritura).
+        self._tool_names_used: set[str] = set()
 
     # ----- Estado -----
 
@@ -96,6 +111,7 @@ class Agent:
                         final_text_parts.append(block.text)
                 elif block.type == BlockType.TOOL_USE:
                     has_tool_call = True
+                    self._tool_names_used.add(block.tool_name)
                     log.info(
                         "tool_call",
                         extra={
@@ -140,3 +156,125 @@ class Agent:
             )
             result = _truncate_tool_result(result)
         return result, is_error
+
+    # ----- Streaming -----
+
+    @property
+    def tool_names_used(self) -> list[str]:
+        """Lista de tool names invocadas durante esta conversación.
+        Usado por el caché para decidir si la respuesta es cacheable."""
+        return list(self._tool_names_used)
+
+    async def send_stream(self, prompt: str) -> AsyncIterator[StreamEvent]:
+        """Variante streaming del agent loop.
+
+        Emite eventos a medida que el modelo genera (text deltas) y
+        avisa cuando entra/sale de tool calls. El estado interno
+        (`messages`, `usage`, `tool_names_used`) queda igual que post-`send`
+        — útil para que el endpoint persista la sesión al terminar.
+        """
+        self._messages.append(
+            Message(role=Role.USER, content=[Block(type=BlockType.TEXT, text=prompt)])
+        )
+
+        for turn in range(self.max_turns):
+            # Acumulamos lo que el provider stream emita para reconstruir
+            # el turno assistant (necesario para persistir messages).
+            assistant_text_parts: list[str] = []
+            tool_uses: list[Block] = []
+            stop_reason: StopReason | None = None
+            usage_for_turn: Usage = Usage()
+
+            async for ev in self.provider.send_stream(
+                self._messages, self.tools.definitions()
+            ):
+                if ev.type == "text":
+                    assistant_text_parts.append(ev.text)
+                    yield ev  # text delta directo al cliente
+                elif ev.type == "tool_use_start":
+                    tool_uses.append(
+                        Block(
+                            type=BlockType.TOOL_USE,
+                            tool_use_id=ev.tool_use_id,
+                            tool_name=ev.tool_name,
+                            tool_input=ev.tool_input,
+                        )
+                    )
+                elif ev.type == "stop":
+                    if ev.stop_reason is not None:
+                        stop_reason = ev.stop_reason
+                    if ev.usage is not None:
+                        usage_for_turn = ev.usage
+                # "usage" y "tool_use_complete" no vienen del provider
+                # base; los emitimos nosotros al ejecutar tools.
+
+            # Acumular usage del turno.
+            self._usage_total = self._usage_total.add(usage_for_turn)
+
+            # Persistir turno assistant.
+            assistant_content: list[Block] = []
+            joined_text = "".join(assistant_text_parts)
+            if joined_text:
+                assistant_content.append(Block(type=BlockType.TEXT, text=joined_text))
+            assistant_content.extend(tool_uses)
+            self._messages.append(Message(role=Role.ASSISTANT, content=assistant_content))
+
+            # Si hay tools → ejecutar y continuar.
+            if stop_reason == StopReason.TOOL_USE and tool_uses:
+                tool_results: list[Block] = []
+                for use in tool_uses:
+                    self._tool_names_used.add(use.tool_name)
+                    log.info(
+                        "tool_call_stream",
+                        extra={
+                            "turn": turn,
+                            "tool": use.tool_name,
+                            "input_preview": (use.tool_input or "")[:200],
+                        },
+                    )
+                    # Avisar al cliente que arrancó la tool.
+                    yield StreamEvent(
+                        type="tool_use_start",
+                        tool_use_id=use.tool_use_id,
+                        tool_name=use.tool_name,
+                        tool_input=use.tool_input,
+                    )
+                    t0 = time.perf_counter()
+                    result, is_error = await self._execute_tool(
+                        use.tool_name, use.tool_input
+                    )
+                    ms = (time.perf_counter() - t0) * 1000
+                    yield StreamEvent(
+                        type="tool_use_complete",
+                        tool_use_id=use.tool_use_id,
+                        tool_name=use.tool_name,
+                        tool_result=result,
+                        is_error=is_error,
+                        latency_ms=round(ms, 1),
+                    )
+                    tool_results.append(
+                        Block(
+                            type=BlockType.TOOL_RESULT,
+                            tool_use_id=use.tool_use_id,
+                            tool_result=result,
+                            is_error=is_error,
+                        )
+                    )
+                self._messages.append(Message(role=Role.USER, content=tool_results))
+                continue
+
+            # No hay tools → fin de la conversación.
+            yield StreamEvent(
+                type="stop",
+                stop_reason=stop_reason or StopReason.END_TURN,
+                usage=self._usage_total,
+            )
+            return
+
+        # Loop budget agotado.
+        log.warning("agent_max_turns_reached_stream", extra={"max_turns": self.max_turns})
+        yield StreamEvent(
+            type="stop",
+            stop_reason=StopReason.OTHER,
+            usage=self._usage_total,
+        )

@@ -16,6 +16,8 @@ from harness.api.types import (
     Response,
     Role,
     StopReason,
+    StreamEvent,
+    StreamEventType,
     ToolDef,
     Usage,
 )
@@ -27,6 +29,8 @@ __all__ = [
     "Response",
     "Role",
     "StopReason",
+    "StreamEvent",
+    "StreamEventType",
     "ToolDef",
     "Usage",
 ]

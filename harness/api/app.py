@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from harness import __version__
 from harness.api.routes import chat as chat_route
 from harness.api.routes import health as health_route
+from harness.cache import ResponseCache
 from harness.session import SessionStore
 from harness.tenant.auth import get_required_bearer_token
 
@@ -79,6 +80,13 @@ def create_app() -> FastAPI:
     # State.
     app.state.session_store = SessionStore()
     app.state.tenant_bundles = {}
+    # ResponseCache: TTL configurable via env vars. Defaults razonables
+    # para el CRM (30s — el estado del CRM cambia rápido).
+    cache_ttl = int(os.environ.get("HARNESS_CACHE_TTL_SECONDS", "30"))
+    cache_size = int(os.environ.get("HARNESS_CACHE_MAXSIZE", "1000"))
+    app.state.response_cache = ResponseCache(
+        maxsize=cache_size, ttl_seconds=cache_ttl
+    )
 
     # Routers.
     app.include_router(health_route.router, tags=["meta"])

@@ -296,16 +296,14 @@ class QueryPostgresTool(Tool):
         except SQLValidationError as e:
             return json.dumps({"error": str(e)}), True
 
-        # 2. Inyectar tenant_slug si corresponde.
-        try:
-            tenant_tables = await self._ensure_tenant_tables()
-            sql = inject_tenant_filter(sql, self._tenant_slug, tenant_tables)
-        except SQLValidationError as e:
-            return json.dumps({"error": str(e)}), True
-        except Exception as e:
-            # Error introspeccionando metadata — no bloqueamos, ejecutamos
-            # sin inyección. Logueamos para diagnóstico.
-            log.warning("tenant_introspection_failed: %s", str(e)[:200])
+        # 2. Inyección automática de tenant_slug — DESACTIVADA.
+        # Razón: el aislamiento real es DB-per-tenant (cada cliente su propia DB,
+        # configurada en data_sources.yaml). La columna tenant_slug existe en
+        # muchas tablas pero queda residual. El auto-inject ROMPE queries con
+        # JOIN porque genera `WHERE tenant_slug = X` sin alias y Postgres lo
+        # marca ambiguo. Si en algún tenant futuro hace falta inyección real,
+        # hacerlo via parser de SQL que sepa de aliases (no string ops).
+        # Histórico del bug: 2026-05-24, primera query compleja en prod.
 
         # 3. Forzar LIMIT.
         sql = ensure_limit(sql, self._default_limit)

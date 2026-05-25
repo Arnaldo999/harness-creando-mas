@@ -137,6 +137,27 @@ def load_tenant_config(slug: str) -> TenantConfig:
                 api_key=_resolve_env(f.get("api_key_env")),
             )
 
+    # telegram_users.yaml (opcional). Solo leemos `allowed_chat_ids`.
+    tg_path = root / "telegram_users.yaml"
+    telegram_ids: list[int] = []
+    if tg_path.is_file():
+        try:
+            tg_data = yaml.safe_load(tg_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            log.warning(
+                "telegram_users_yaml_invalido",
+                extra={"tenant": slug, "err": str(e)},
+            )
+            tg_data = {}
+        for item in tg_data.get("allowed_chat_ids") or []:
+            try:
+                telegram_ids.append(int(item))
+            except (TypeError, ValueError):
+                log.warning(
+                    "telegram_allowed_id_no_entero",
+                    extra={"tenant": slug, "valor": repr(item)},
+                )
+
     return TenantConfig(
         slug=slug,
         system_prompt=system_prompt,
@@ -146,6 +167,7 @@ def load_tenant_config(slug: str) -> TenantConfig:
         tavily_api_key=tavily_key,
         llm_primary=llm_primary,
         llm_fallback=llm_fallback,
+        telegram_allowed_chat_ids=telegram_ids,
     )
 
 

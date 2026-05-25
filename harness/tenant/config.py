@@ -49,3 +49,6 @@ class TenantConfig:
     tavily_api_key: str | None = None
     llm_primary: LLMConfig | None = None
     llm_fallback: LLMConfig | None = None
+    # IDs de Telegram autorizados a hablar con el bot como operador
+    # de este tenant. Vacía → tenant no acepta mensajes por Telegram.
+    telegram_allowed_chat_ids: list[int] = field(default_factory=list)

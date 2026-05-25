@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from harness import __version__
 from harness.api.routes import chat as chat_route
 from harness.api.routes import health as health_route
+from harness.api.routes import telegram as telegram_route
 from harness.cache import ResponseCache
 from harness.session import SessionStore
 from harness.tenant.auth import get_required_bearer_token
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     # Routers.
     app.include_router(health_route.router, tags=["meta"])
     app.include_router(chat_route.router, tags=["chat"])
+    app.include_router(telegram_route.router, tags=["telegram"])
 
     # Warn si arrancamos sin auth.
     if not get_required_bearer_token():

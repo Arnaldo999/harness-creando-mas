@@ -1,0 +1,4 @@
+# IDs de Telegram autorizados a usar el bot @arnaldo_agente_bot
+# para hablar como operador del tenant 'demo' (Lovbot Inmobiliaria).
+# Cómo obtener tu chat_id: hablale a @userinfobot y te lo dice.
+allowed_chat_ids: []  # vacío por ahora — Arnaldo lo llena cuando tenga su chat_id

@@ -1,0 +1,3 @@
+# IDs de Telegram autorizados a usar el bot del CRM jurídico Rawson.
+# Cómo obtener tu chat_id: hablale al bot "User Info / Get ID / idbot" en Telegram.
+allowed_chat_ids: []   # vacío por ahora — sumar chat_id de Adrián Alveolite y/o Mica cuando los obtengamos

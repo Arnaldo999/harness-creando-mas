@@ -1,0 +1,16 @@
+# Tools habilitadas para el tenant rawson-juridico (Estudio Rawson — Propiedad Intelectual)
+# Diferencias vs el tenant 'demo' inmobiliario:
+# - SIN lookup_lead / update_lead_estado: los leads jurídicos tienen flow diferente (no son
+#   tan transaccionales como inmobiliario). Si en el futuro se valida que el flow funciona,
+#   se podrían agregar custom tools (ej. crear_propuesta, registrar_oposicion).
+# - generar_resumen_conversacion también queda fuera por ahora — el CRM jurídico no usa
+#   conversation summaries.
+
+enabled:
+  - query_postgres
+  - tavily_search        # útil para buscar jurisprudencia INPI / casos similares
+
+disabled:
+  - bash
+  - read_file
+  - write_file

@@ -1,0 +1,40 @@
+# Data sources del tenant `rawson-juridico` (Estudio Rawson — Propiedad Intelectual).
+# Postgres Mica (Easypanel) — DB-per-estudio: este tenant usa juridico_rawson.
+# Cuando sumés Bompasso o Wagner u otro estudio, copiá esta carpeta a
+# tenants/<slug>-juridico/ y cambiá solo `database`.
+
+postgres:
+  host_env: MICA_PG_HOST
+  port_env: MICA_PG_PORT
+  user_env: MICA_PG_USER
+  password_env: MICA_PG_PASS
+  database: juridico_rawson
+  # NO se inyecta tenant_slug automáticamente (igual que demo) — el aislamiento es
+  # DB-per-estudio. Cada estudio tiene su propia DB en el Postgres compartido.
+
+tavily:
+  api_key_env: TAVILY_API_KEY
+
+llm:
+  primary:
+    provider: openai
+    model: gpt-4o-mini
+    api_key_env: LOVBOT_OPENAI_API_KEY    # decisión: reusar la key actual de Arnaldo
+    # Migrar a MICA_OPENAI_API_KEY cuando Mica facture aparte
+  fallback:
+    provider: gemini
+    model: gemini-2.5-flash
+    api_key_env: LOVBOT_GEMINI_API_KEY
+
+# Rate limits del demo Rawson — protección estándar mientras esté en demo público.
+# Cuando se cierre el contrato con Adrián Alveolite y pase a Producción real,
+# subir o quitar los límites (lo cobramos por uso al estudio).
+rate_limits:
+  per_minute: 5
+  per_hour: 30
+  per_day: 50    # un poco más generoso que demo inmobiliario porque el operador
+                  # del CRM jurídico hace más consultas operativas diarias
+
+# Telegram users autorizados — vacío por ahora. Si Adrián o Mica quieren usar
+# Telegram, agregar sus chat_ids acá.
+telegram_users_path: ./telegram_users.yaml

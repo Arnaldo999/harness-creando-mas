@@ -27,13 +27,13 @@ llm:
     api_key_env: LOVBOT_GEMINI_API_KEY
 
 # Rate limits del demo Rawson — protección estándar mientras esté en demo público.
+# Mismo límite que el demo inmobiliario de Robert (20/día) para consistencia.
 # Cuando se cierre el contrato con Adrián Alveolite y pase a Producción real,
 # subir o quitar los límites (lo cobramos por uso al estudio).
 rate_limits:
   per_minute: 5
   per_hour: 30
-  per_day: 50    # un poco más generoso que demo inmobiliario porque el operador
-                  # del CRM jurídico hace más consultas operativas diarias
+  per_day: 20
 
 # Telegram users autorizados — vacío por ahora. Si Adrián o Mica quieren usar
 # Telegram, agregar sus chat_ids acá.

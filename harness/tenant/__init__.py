@@ -6,6 +6,7 @@ Cada tenant vive en `tenants/<slug>/` con tres archivos:
 - `data_sources.yaml` — credenciales (vía env vars) y modelos LLM.
 """
 
+from harness.limits import RateLimitsConfig
 from harness.tenant.auth import resolve_tenant
 from harness.tenant.config import LLMConfig, PostgresSource, TenantConfig, TenantNotFoundError
 from harness.tenant.loader import (
@@ -20,6 +21,7 @@ __all__ = [
     "TenantNotFoundError",
     "PostgresSource",
     "LLMConfig",
+    "RateLimitsConfig",
     "TenantBundle",
     "load_tenant_config",
     "build_tenant_bundle",

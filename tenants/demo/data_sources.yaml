@@ -26,3 +26,11 @@ llm:
     provider: gemini
     model: gemini-2.5-flash
     api_key_env: LOVBOT_GEMINI_API_KEY
+
+# Rate limits del demo público — protege la factura OpenAI contra abuso.
+# Cuando se venda a clientes en producción, override per-tenant con límites
+# más altos o quitar el block para sin-límite.
+rate_limits:
+  per_minute: 5
+  per_hour: 30
+  per_day: 20

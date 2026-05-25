@@ -16,6 +16,7 @@ from pathlib import Path
 
 import yaml
 
+from harness.limits import RateLimitsConfig
 from harness.provider import GeminiProvider, OpenAIProvider, Provider, ProviderRouter
 from harness.tenant.config import (
     LLMConfig,
@@ -62,6 +63,31 @@ def _resolve_env(name: str | None) -> str | None:
     return val
 
 
+def _coerce_positive_int(value: object, slug: str, field_name: str) -> int | None:
+    """Convierte a int positivo. None/ausente → None (sin límite en
+    esa ventana). Si vino algo raro (string, negativo, cero), logueamos
+    y tratamos como None — preferimos arrancar sin esa ventana antes
+    que crashear el tenant entero por un yaml mal escrito.
+    """
+    if value is None:
+        return None
+    try:
+        ivalue = int(value)
+    except (TypeError, ValueError):
+        log.warning(
+            "rate_limit_invalido",
+            extra={"tenant": slug, "field": field_name, "valor": repr(value)},
+        )
+        return None
+    if ivalue <= 0:
+        log.warning(
+            "rate_limit_no_positivo",
+            extra={"tenant": slug, "field": field_name, "valor": ivalue},
+        )
+        return None
+    return ivalue
+
+
 def load_tenant_config(slug: str) -> TenantConfig:
     """Carga `tenants/<slug>/` y resuelve env vars referenciadas.
 
@@ -92,6 +118,8 @@ def load_tenant_config(slug: str) -> TenantConfig:
     tavily_key: str | None = None
     llm_primary: LLMConfig | None = None
     llm_fallback: LLMConfig | None = None
+
+    rate_limits: RateLimitsConfig | None = None
 
     if ds_path.is_file():
         ds = yaml.safe_load(ds_path.read_text(encoding="utf-8")) or {}
@@ -137,6 +165,16 @@ def load_tenant_config(slug: str) -> TenantConfig:
                 api_key=_resolve_env(f.get("api_key_env")),
             )
 
+        # Rate limits (opcional). Si el block no existe → tenant sin
+        # límite, comportamiento legacy.
+        rl_block = ds.get("rate_limits")
+        if rl_block:
+            rate_limits = RateLimitsConfig(
+                per_minute=_coerce_positive_int(rl_block.get("per_minute"), slug, "per_minute"),
+                per_hour=_coerce_positive_int(rl_block.get("per_hour"), slug, "per_hour"),
+                per_day=_coerce_positive_int(rl_block.get("per_day"), slug, "per_day"),
+            )
+
     # telegram_users.yaml (opcional). Solo leemos `allowed_chat_ids`.
     tg_path = root / "telegram_users.yaml"
     telegram_ids: list[int] = []
@@ -168,6 +206,7 @@ def load_tenant_config(slug: str) -> TenantConfig:
         llm_primary=llm_primary,
         llm_fallback=llm_fallback,
         telegram_allowed_chat_ids=telegram_ids,
+        rate_limits=rate_limits,
     )
 
 

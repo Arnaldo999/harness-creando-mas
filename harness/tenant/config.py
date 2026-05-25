@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from harness.limits import RateLimitsConfig
+
 
 class TenantNotFoundError(LookupError):
     """No existe directorio `tenants/<slug>/`."""
@@ -52,3 +54,6 @@ class TenantConfig:
     # IDs de Telegram autorizados a hablar con el bot como operador
     # de este tenant. Vacía → tenant no acepta mensajes por Telegram.
     telegram_allowed_chat_ids: list[int] = field(default_factory=list)
+    # Rate limits per-tenant. None → tenant sin límite (caso producción
+    # facturable). Configurado via block `rate_limits` del data_sources.yaml.
+    rate_limits: RateLimitsConfig | None = None

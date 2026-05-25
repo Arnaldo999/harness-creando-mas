@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
+from harness.limits import RateLimiter
 from harness.session import SessionStore
 from harness.tenant.auth import verify_bearer
 
@@ -22,6 +23,18 @@ def get_session_store(request: Request) -> SessionStore:
         store = SessionStore()
         request.app.state.session_store = store
     return store
+
+
+def get_rate_limiter(request: Request) -> RateLimiter:
+    """RateLimiter vive en `app.state.rate_limiter`, inicializado por
+    el factory. Lazy-fallback igual que SessionStore para tests
+    antiguos que armen la app a mano.
+    """
+    limiter = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None:
+        limiter = RateLimiter()
+        request.app.state.rate_limiter = limiter
+    return limiter
 
 
 def require_bearer(
@@ -46,3 +59,4 @@ def require_bearer(
 # Alias re-exportado para legibilidad en routers.
 BearerAuth = Annotated[None, Depends(require_bearer)]
 SessionStoreDep = Annotated[SessionStore, Depends(get_session_store)]
+RateLimiterDep = Annotated[RateLimiter, Depends(get_rate_limiter)]

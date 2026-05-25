@@ -30,8 +30,12 @@ from harness.adapters.telegram import (
     validate_secret,
 )
 from harness.agent import Agent
-from harness.api.deps import SessionStoreDep
-from harness.api.routes.chat import _get_or_build_bundle
+from harness.api.deps import RateLimiterDep, SessionStoreDep
+from harness.api.routes.chat import (
+    _check_rate_limit,
+    _format_rate_limit_message,
+    _get_or_build_bundle,
+)
 from harness.provider.router import ProvidersExhaustedError
 
 log = logging.getLogger(__name__)
@@ -117,6 +121,7 @@ async def _run_agent_and_reply(
 async def telegram_webhook(
     request: Request,
     store: SessionStoreDep,
+    limiter: RateLimiterDep,
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ) -> dict:
     """Recibe un Update de Telegram. SIEMPRE devolvemos 200 (excepto
@@ -191,6 +196,44 @@ async def telegram_webhook(
             extra={"chat_id": chat_id, "from_id": from_id},
         )
         await send_message(token, chat_id, MSG_NO_AUTORIZADO)
+        return {"ok": True}
+
+    # 5.5. Rate limit. Si el tenant tiene `rate_limits` y el chat se
+    # pasó, contestamos al user con el mensaje canned + emoji friendly
+    # y NO llamamos al agent (200 OK para que Telegram no reintente).
+    try:
+        bundle = _get_or_build_bundle(request, tenant_slug)
+    except Exception as e:
+        log.exception(
+            "telegram_bundle_error_prelimit",
+            extra={"tenant": tenant_slug, "chat_id": chat_id, "err": str(e)},
+        )
+        await send_message(token, chat_id, MSG_ERROR_TEMPORAL)
+        return {"ok": True}
+
+    rl_result = await _check_rate_limit(
+        limiter,
+        bundle,
+        tenant_slug=tenant_slug,
+        user_key=f"telegram_{chat_id}",
+    )
+    if rl_result is not None:
+        log.warning(
+            "telegram_rate_limited",
+            extra={
+                "tenant": tenant_slug,
+                "chat_id": chat_id,
+                "exceeded_window": rl_result.exceeded_window,
+                "retry_after_seconds": rl_result.retry_after_seconds,
+                "current": rl_result.current,
+            },
+        )
+        # Prefijo con ⏳ — friendly + obvio que es rate limit.
+        await send_message(
+            token,
+            chat_id,
+            f"⏳ {_format_rate_limit_message(rl_result)}",
+        )
         return {"ok": True}
 
     # 6. Correr el agent con timeout — si nos pasamos del budget,

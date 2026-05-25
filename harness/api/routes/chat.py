@@ -35,9 +35,15 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from harness.agent import Agent
-from harness.api.deps import BearerAuth, SessionStoreDep
+from harness.api.deps import BearerAuth, RateLimiterDep, SessionStoreDep
 from harness.api.schemas import ChatRequest, ChatResponse
 from harness.cache import ResponseCache
+from harness.limits import (
+    RateLimiter,
+    RateLimitResult,
+    format_retry_after_human,
+    format_window_human,
+)
 from harness.provider.router import ProviderRouter, ProvidersExhaustedError
 from harness.session import new_session_id
 from harness.tenant import (
@@ -81,11 +87,51 @@ def _resolve_provider_name(bundle: TenantBundle) -> str | None:
     return bundle.provider.name
 
 
+def _format_rate_limit_message(result: RateLimitResult) -> str:
+    """Mensaje canned para devolver al usuario cuando se excede el límite.
+
+    Tono: amistoso, explica por qué y cómo destrabarlo. NO menciona
+    detalles internos (cuotas, tenants, etc.) más allá de lo necesario
+    para que el user entienda.
+    """
+    window = result.exceeded_window or "minute"
+    current = result.current.get(window, 0)
+    return (
+        f"Alcanzaste el límite del demo ({current} consultas en el "
+        f"{format_window_human(window)}). Por favor esperá "
+        f"{format_retry_after_human(result.retry_after_seconds)} antes "
+        f"de volver a consultar. Si querés probar sin límites, contactá "
+        f"con el equipo de Creando Más."
+    )
+
+
+async def _check_rate_limit(
+    limiter: RateLimiter,
+    bundle: TenantBundle,
+    *,
+    tenant_slug: str,
+    user_key: str,
+) -> RateLimitResult | None:
+    """Devuelve `None` si el tenant no tiene límites o si pasó el check.
+    Devuelve un `RateLimitResult` con `allowed=False` cuando hay que
+    cortar.
+    """
+    limits = bundle.config.rate_limits
+    if limits is None:
+        return None
+    key = f"{tenant_slug}:{user_key}"
+    result = await limiter.check_and_record(key, limits)
+    if result.allowed:
+        return None
+    return result
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
     request: Request,
     store: SessionStoreDep,
+    limiter: RateLimiterDep,
     _auth: BearerAuth,
 ) -> ChatResponse:
     started = time.perf_counter()
@@ -101,6 +147,34 @@ async def chat(
 
     # 2. Session.
     session_id = req.session_id or new_session_id()
+
+    # 2.5. Rate limit. Lo chequeamos ANTES del cache: un atacante
+    # spammeando consultas idempotentes igual consume CPU y debe ser
+    # cortado. `user_key` cae a "anon" si no vino session — mejor que
+    # nada para no dejar bypass triviall.
+    user_key = req.session_id or "anon"
+    rl_result = await _check_rate_limit(
+        limiter, bundle, tenant_slug=slug, user_key=user_key
+    )
+    if rl_result is not None:
+        log.warning(
+            "chat_rate_limited",
+            extra={
+                "tenant": slug,
+                "session_id": session_id,
+                "user_key": user_key,
+                "exceeded_window": rl_result.exceeded_window,
+                "retry_after_seconds": rl_result.retry_after_seconds,
+                "current": rl_result.current,
+            },
+        )
+        return ChatResponse(
+            respuesta=_format_rate_limit_message(rl_result),
+            ok=False,
+            cached=False,
+            session_id=session_id,
+            provider_used=None,
+        )
 
     # 3. Cache lookup. Si hit → response inmediato.
     cache_key = ResponseCache.make_key(slug, req.message)
@@ -216,6 +290,7 @@ async def chat_stream(
     req: ChatRequest,
     request: Request,
     store: SessionStoreDep,
+    limiter: RateLimiterDep,
     _auth: BearerAuth,
 ) -> StreamingResponse:
     """Variante SSE de /chat.
@@ -240,8 +315,42 @@ async def chat_stream(
     cache = _get_response_cache(request)
     session_id = req.session_id or new_session_id()
     cache_key = ResponseCache.make_key(slug, req.message)
+    user_key = req.session_id or "anon"
 
     async def event_generator() -> AsyncIterator[str]:
+        # --- Rate limit ---
+        rl_result = await _check_rate_limit(
+            limiter, bundle, tenant_slug=slug, user_key=user_key
+        )
+        if rl_result is not None:
+            latency_ms = (time.perf_counter() - started) * 1000
+            log.warning(
+                "chat_stream_rate_limited",
+                extra={
+                    "tenant": slug,
+                    "session_id": session_id,
+                    "user_key": user_key,
+                    "exceeded_window": rl_result.exceeded_window,
+                    "retry_after_seconds": rl_result.retry_after_seconds,
+                    "current": rl_result.current,
+                },
+            )
+            yield _sse_format(
+                "text", {"content": _format_rate_limit_message(rl_result)}
+            )
+            yield _sse_format(
+                "done",
+                {
+                    "tokens_in": None,
+                    "tokens_out": None,
+                    "provider_used": None,
+                    "session_id": session_id,
+                    "latency_ms": round(latency_ms, 2),
+                    "cached": False,
+                },
+            )
+            return
+
         # --- Cache hit ---
         hit = await cache.get(cache_key)
         if hit is not None:

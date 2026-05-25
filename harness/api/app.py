@@ -30,6 +30,7 @@ from harness.api.routes import chat as chat_route
 from harness.api.routes import health as health_route
 from harness.api.routes import telegram as telegram_route
 from harness.cache import ResponseCache
+from harness.limits import RateLimiter
 from harness.session import SessionStore
 from harness.tenant.auth import get_required_bearer_token
 
@@ -88,6 +89,11 @@ def create_app() -> FastAPI:
     app.state.response_cache = ResponseCache(
         maxsize=cache_size, ttl_seconds=cache_ttl
     )
+    # RateLimiter: una sola instancia para todos los tenants. El scoping
+    # se hace via la key (tenant:user). Maxsize alto: cap de memoria duro
+    # sin acotar el ecosistema esperado de chats.
+    rl_maxsize = int(os.environ.get("HARNESS_RATELIMIT_MAXSIZE", "10000"))
+    app.state.rate_limiter = RateLimiter(maxsize=rl_maxsize)
 
     # Routers.
     app.include_router(health_route.router, tags=["meta"])

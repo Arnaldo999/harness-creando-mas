@@ -1,0 +1,6 @@
+# Telegram users autorizados para el tenant `mica-inmobiliaria-demo`.
+# Vacío por ahora — la entrada principal es el CRM web embebido en
+# https://system-ia-agencia.vercel.app/system-ia/dev/crm-v2?tenant=mica-demo
+# (será migrado a https://inmobiliaria.systemia.site/ una vez DNS+Easypanel listos).
+
+users: []

@@ -1,0 +1,39 @@
+# Data sources del tenant `mica-inmobiliaria-demo` (Inmobiliaria Demo Mica).
+# Postgres Mica (Easypanel) — DB nueva creada 2026-05-27 para migrar el CRM
+# inmobiliario de Airtable (cuota excedida) a Postgres. Replica el patrón
+# `rawson-juridico` pero apuntando a `inmobiliaria_mica` en vez de
+# `juridico_rawson`.
+
+postgres:
+  host_env: MICA_PG_HOST
+  port_env: MICA_PG_PORT
+  user_env: MICA_PG_USER
+  password_env: MICA_PG_PASS
+  database: inmobiliaria_mica
+  # Aislamiento DB-per-cliente: este tenant tiene su propia DB.
+  # tenant_slug='mica-demo' se usa en las filas (compatibilidad con el HTML
+  # heredado de Robert) pero el filtrado real es por DB.
+
+tavily:
+  api_key_env: TAVILY_API_KEY
+
+llm:
+  primary:
+    provider: openai
+    model: gpt-4o-mini
+    api_key_env: LOVBOT_OPENAI_API_KEY    # Reusa la key actual de Arnaldo.
+    # Migrar a MICA_OPENAI_API_KEY cuando Mica facture aparte.
+  fallback:
+    provider: gemini
+    model: gemini-2.5-flash
+    api_key_env: LOVBOT_GEMINI_API_KEY
+
+# Rate limits del demo público — protege la factura OpenAI contra abuso.
+# Mismos límites que el demo Robert y el rawson para consistencia.
+rate_limits:
+  per_minute: 5
+  per_hour: 30
+  per_day: 20
+
+# Telegram users autorizados — vacío. El CRM web es la entrada principal.
+telegram_users_path: ./telegram_users.yaml

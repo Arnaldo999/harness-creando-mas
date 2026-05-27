@@ -1,0 +1,15 @@
+# Tools enabled para el tenant `mica-inmobiliaria-demo` (Inmobiliaria Demo Mica).
+# Mismo set que el tenant `demo` (Robert) — el modelo del CRM es idéntico:
+# leads + propiedades + clientes_activos, mismo flow comercial inmobiliario.
+
+enabled:
+  - query_postgres
+  - lookup_lead
+  - update_lead_estado
+  - generar_resumen_conversacion
+  - tavily_search
+
+disabled:
+  - bash
+  - read_file
+  - write_file

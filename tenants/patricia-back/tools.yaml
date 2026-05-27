@@ -1,0 +1,24 @@
+# Tools habilitadas para el tenant patricia-back (Rizoma — inmobiliaria de loteos).
+#
+# Foco inicial: consultas sobre loteos, lotes, clientes activos, propiedades.
+# Patricia/Hernán usan el chat para responder cosas tipo:
+#   - "¿Cuántos lotes me quedan libres en Altos del Río?"
+#   - "Mostrame los clientes en mora"
+#   - "Próximos vencimientos de cuotas de los próximos 7 días"
+#   - "Cuál es el lote más vendido"
+# Todas esas respuestas salen de SELECT a rizoma.* via query_postgres con guardrails.
+
+enabled:
+  - query_postgres        # core: queries de solo lectura a rizoma.lotes/loteos/activos/propiedades
+  - tavily_search         # útil si preguntan info externa (ej. precio m² mercado Posadas)
+
+# Disabled: las tools de leads (lookup/update) son específicas del flow CRM Robert
+# inmobiliario, no aplican a Rizoma todavía. Si más adelante validamos que el flow
+# funciona acá, las habilitamos.
+disabled:
+  - lookup_lead
+  - update_lead_estado
+  - generar_resumen_conversacion
+  - bash
+  - read_file
+  - write_file

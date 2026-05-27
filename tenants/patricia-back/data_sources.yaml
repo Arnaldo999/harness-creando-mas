@@ -1,0 +1,44 @@
+# Data sources del tenant `patricia-back` (Rizoma Propiedades — Patricia Back Argentina).
+# Postgres Coolify Arnaldo (container `oknk8w69xzw6ma5j3ugqwykb` en el VPS 187.77.254.33).
+# DB: patricia_crm — schema multi-marca (rizoma, misionerita, patricios, martina, bocanada, progreso, fundacion).
+# Para Patricia el foco inicial es schema `rizoma` (inmobiliaria con loteos, propiedades, clientes activos).
+
+postgres:
+  host_env: ARNALDO_PG_HOST
+  port_env: ARNALDO_PG_PORT
+  user_env: ARNALDO_PG_USER
+  password_env: ARNALDO_PG_PASS
+  database: patricia_crm
+  # NO se inyecta tenant_slug automáticamente — el aislamiento es por DB.
+  # Las tablas relevantes para Rizoma viven en schemas: rizoma.lotes, rizoma.loteos,
+  # rizoma.clientes_activos, rizoma.propiedades, rizoma.tasaciones, pback.leads.
+
+tavily:
+  api_key_env: TAVILY_API_KEY
+
+llm:
+  # DeepSeek-Chat — API OpenAI-compatible, ~$0.27/$1.10 por 1M tokens.
+  # Usamos el provider "openai" pero con base_url custom; el cliente AsyncOpenAI
+  # del harness habla DeepSeek sin cambios adicionales.
+  primary:
+    provider: openai
+    model: deepseek-chat
+    api_key_env: ARNALDO_DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/v1
+  # Fallback a Gemini si DeepSeek se cae (failover antes del primer chunk del stream).
+  # Si no se setea la env var de Gemini, el fallback queda inactivo silenciosamente.
+  fallback:
+    provider: gemini
+    model: gemini-2.5-flash
+    api_key_env: ARNALDO_GEMINI_API_KEY
+
+# Rate limits — Patricia es cliente productivo (no demo). Límites generosos.
+# Si vemos que abusan o cobramos por uso, ajustamos.
+rate_limits:
+  per_minute: 20
+  per_hour: 200
+  per_day: 1000
+
+# Telegram users autorizados — vacío. Si Patricia/Hernán quieren usar el bot
+# Telegram (vs el chat web), agregar sus chat_ids.
+telegram_users_path: ./telegram_users.yaml

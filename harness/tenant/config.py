@@ -33,6 +33,10 @@ class LLMConfig:
     provider: str  # "openai" | "gemini"
     model: str
     api_key: str | None  # resuelto desde env var
+    # base_url opcional. Si está seteado y provider="openai", el cliente
+    # OpenAI apunta a ese endpoint (compatibilidad con DeepSeek, Groq,
+    # Together, OpenRouter, etc — toda API OpenAI-compatible).
+    base_url: str | None = None
 
 
 @dataclass

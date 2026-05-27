@@ -156,6 +156,7 @@ def load_tenant_config(slug: str) -> TenantConfig:
                 provider=p.get("provider", "openai"),
                 model=p.get("model", "gpt-5"),
                 api_key=_resolve_env(p.get("api_key_env")),
+                base_url=p.get("base_url"),
             )
         if llm_block.get("fallback"):
             f = llm_block["fallback"]
@@ -163,6 +164,7 @@ def load_tenant_config(slug: str) -> TenantConfig:
                 provider=f.get("provider", "gemini"),
                 model=f.get("model", "gemini-2.5-pro"),
                 api_key=_resolve_env(f.get("api_key_env")),
+                base_url=f.get("base_url"),
             )
 
         # Rate limits (opcional). Si el block no existe → tenant sin
@@ -236,6 +238,7 @@ def _build_provider_from_config(llm: LLMConfig | None, system: str) -> Provider 
             api_key=llm.api_key,
             model=llm.model,
             system=system,
+            base_url=llm.base_url,  # None = default (api.openai.com); seteado = endpoint OpenAI-compat (DeepSeek, Groq, etc.)
         )
     if llm.provider == "gemini":
         return GeminiProvider(

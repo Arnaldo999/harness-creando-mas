@@ -1,0 +1,4 @@
+# Telegram users autorizados para este tenant.
+# Si Patricia/Hernán quieren acceder al bot Telegram (Fase 3), agregar sus
+# chat_ids acá. Por ahora vacío — solo usan el chat web del CRM.
+allowed_chat_ids: []

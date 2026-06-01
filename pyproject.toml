@@ -44,6 +44,10 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.10.0",
     "httpx>=0.27.0",  # ya en deps base, declarado acá para claridad
+    # Postgres real efímero para tests de integración SIN mocks (Cap 14
+    # del blueprint-harness). Levanta un postgres:16 en Docker, lo llena,
+    # corre el test contra la DB real y lo tira. Requiere Docker en el runner.
+    "testcontainers[postgresql]>=4.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -54,6 +58,12 @@ include = ["harness*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-ra -q"
+markers = [
+    # Tests que levantan un Postgres real vía testcontainers (necesitan Docker).
+    # Correr solo estos:   pytest -m integration
+    # Saltearlos (rápido):  pytest -m 'not integration'
+    "integration: test de integración que requiere Docker (testcontainers)",
+]
 
 [tool.ruff]
 line-length = 100

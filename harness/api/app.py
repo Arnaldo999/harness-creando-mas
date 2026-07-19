@@ -51,6 +51,7 @@ def _cors_origins() -> list[str]:
         return [o.strip() for o in custom.split(",") if o.strip()]
     return [
         "https://crm.lovbot.ai",
+        "https://pro.crm.lovbot.ai",  # CRM Pro (re-base del demo, SPEC crm-pro-robert) — chat IA
         "http://localhost",
         "http://localhost:8080",
         "http://localhost:3000",

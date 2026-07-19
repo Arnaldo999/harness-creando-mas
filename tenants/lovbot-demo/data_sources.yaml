@@ -1,0 +1,38 @@
+# Data sources del tenant `lovbot-demo` (Lovbot CRM Pro Inmobiliaria).
+# Los `*_env` son nombres de variables de entorno — el loader resuelve
+# el valor real desde el entorno del proceso.
+#
+# Este tenant sirve al CRM Pro (pro.crm.lovbot.ai) y apunta a la DB
+# `lovbot_demo_pro` (tabla principal de contactos: `clientes`, NO `leads`).
+
+postgres:
+  host_env: LOVBOT_PG_HOST
+  port_env: LOVBOT_PG_PORT
+  user_env: LOVBOT_PG_USER
+  password_env: LOVBOT_PG_PASS
+  database: lovbot_demo_pro
+  # NOTA: la inyección automática de tenant_slug está DESACTIVADA en el
+  # harness (aislamiento real = DB-per-tenant). Los datos viven todos en
+  # esta DB, así que las queries no necesitan filtrar por tenant_slug.
+
+tavily:
+  api_key_env: TAVILY_API_KEY
+
+llm:
+  primary:
+    # gpt-4o-mini: sin reasoning overhead, ~3-5x más rápido para tool_calls
+    # del CRM, mismo tool-calling API. Switch desde gpt-5-mini para responder
+    # más rápido en streaming SSE (menos tiempo hasta el primer chunk).
+    provider: openai
+    model: gpt-4o-mini
+    api_key_env: LOVBOT_OPENAI_API_KEY
+  fallback:
+    provider: gemini
+    model: gemini-2.5-flash
+    api_key_env: LOVBOT_GEMINI_API_KEY
+
+# Rate limits del demo público — protege la factura OpenAI contra abuso.
+rate_limits:
+  per_minute: 5
+  per_hour: 30
+  per_day: 20

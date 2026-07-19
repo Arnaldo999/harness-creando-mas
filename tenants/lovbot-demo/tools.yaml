@@ -1,0 +1,17 @@
+# Tools enabled para el tenant `demo`.
+# El loader (harness/tenant/loader.py) lee este archivo y solo instancia
+# las tools listadas. Las disabled son referencia documental — el loader
+# no las cargaría de todas formas en modo HTTP, pero las dejamos
+# explícitas para auditabilidad.
+
+enabled:
+  - query_postgres
+  - lookup_lead
+  - update_lead_estado
+  - generar_resumen_conversacion
+  - tavily_search
+
+disabled:
+  - bash
+  - read_file
+  - write_file
